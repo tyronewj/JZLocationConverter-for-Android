@@ -1,7 +1,9 @@
+package cn.wj.lbstest.utils;
 
-/**
- * Created by taoweiji on 15/3/26.
- */
+import android.location.Location;
+
+import com.amap.api.maps.model.LatLng;
+
 public class JZLocationConverter {
 
     private static final double LAT_OFFSET_0(double x, double y) {
@@ -69,13 +71,13 @@ public class JZLocationConverter {
     }
 
     public static LatLng gcj02Encrypt(double ggLat, double ggLon) {
-        LatLng resPoint = new LatLng();
+//        LatLng resPoint = new LatLng();
         double mgLat;
         double mgLon;
         if (outOfChina(ggLat, ggLon)) {
-            resPoint.latitude = ggLat;
-            resPoint.longitude = ggLon;
-            return resPoint;
+//            resPoint.latitude = ggLat;
+//            resPoint.longitude = ggLon;
+            return new LatLng(ggLat, ggLon);
         }
         double dLat = transformLat(ggLon - 105.0, ggLat - 35.0);
         double dLon = transformLon(ggLon - 105.0, ggLat - 35.0);
@@ -88,38 +90,38 @@ public class JZLocationConverter {
         mgLat = ggLat + dLat;
         mgLon = ggLon + dLon;
 
-        resPoint.latitude = mgLat;
-        resPoint.longitude = mgLon;
-        return resPoint;
+//        resPoint.latitude = mgLat;
+//        resPoint.longitude = mgLon;
+        return new LatLng(mgLat, mgLon);
     }
 
     public static LatLng gcj02Decrypt(double gjLat, double gjLon) {
         LatLng gPt = gcj02Encrypt(gjLat, gjLon);
         double dLon = gPt.longitude - gjLon;
         double dLat = gPt.latitude - gjLat;
-        LatLng pt = new LatLng();
-        pt.latitude = gjLat - dLat;
-        pt.longitude = gjLon - dLon;
+        LatLng pt = new LatLng(gjLat - dLat,gjLon - dLon);
+//        pt.latitude = gjLat - dLat;
+//        pt.longitude = gjLon - dLon;
         return pt;
     }
 
     public static LatLng bd09Decrypt(double bdLat, double bdLon) {
-        LatLng gcjPt = new LatLng();
         double x = bdLon - 0.0065, y = bdLat - 0.006;
         double z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * Math.PI);
         double theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * Math.PI);
-        gcjPt.longitude = z * Math.cos(theta);
-        gcjPt.latitude = z * Math.sin(theta);
+        LatLng gcjPt = new LatLng(z * Math.sin(theta),z * Math.cos(theta));
+//        gcjPt.longitude = z * Math.cos(theta);
+//        gcjPt.latitude = z * Math.sin(theta);
         return gcjPt;
     }
 
     public static LatLng bd09Encrypt(double ggLat, double ggLon) {
-        LatLng bdPt = new LatLng();
         double x = ggLon, y = ggLat;
         double z = Math.sqrt(x * x + y * y) + 0.00002 * Math.sin(y * Math.PI);
         double theta = Math.atan2(y, x) + 0.000003 * Math.cos(x * Math.PI);
-        bdPt.longitude = z * Math.cos(theta) + 0.0065;
-        bdPt.latitude = z * Math.sin(theta) + 0.006;
+        LatLng bdPt = new LatLng(z * Math.sin(theta) + 0.006,z * Math.cos(theta) + 0.0065);
+//        bdPt.longitude = z * Math.cos(theta) + 0.0065;
+//        bdPt.latitude = z * Math.sin(theta) + 0.006;
         return bdPt;
     }
 
@@ -185,32 +187,68 @@ public class JZLocationConverter {
         return gcj02Decrypt(gcj02.latitude, gcj02.longitude);
     }
 
-    public static class LatLng {
-        public double latitude;
-        public double longitude;
+	/**
+	 * 将GCJ-02坐标信息转换成exif中存储的格式
+	 * 
+	 * @param gpsInfo
+	 *            latitude , longitude  40.0447706987081
+	 * @return <b>exif</b> 40/1,2/1,4117452/100000
+	 */
+	public static String gpsInfoConvert(double gpsInfo){
+		gpsInfo = Math.abs(gpsInfo);
+		String dms = Location.convert(gpsInfo, Location.FORMAT_SECONDS);
+		String[] splits = dms.split(":");
+		
+		for (int i = 0; i < splits.length; i++) {
+			if (splits[i].indexOf(".") != -1) {
+				splits[i]=transforData(splits[i]);
+			}else {
+				splits[i]=splits[i]+"/1";
+			}
+		}
+		return splits[0]+","+splits[1]+","+splits[2];
+	}
+	
+	
+	/**
+	 * double型转换成整数相除
+	 * @param str 41.17452
+	 * @return 4117452/100000
+	 */
+	public static String transforData(String str) {
+		String [] splitStrings = str.split("\\.");
+		int length = splitStrings[1].length();
+		int right = (int) Math.pow(10, length);
+		int left = (int)Math.rint((Double.parseDouble(str)*(double)right));
+		return left+"/"+right;
+	}
 
-        public LatLng(double latitude, double longitude) {
-            this.latitude = latitude;
-            this.longitude = longitude;
-        }
-
-        public LatLng() {
-        }
-
-        public double getLatitude() {
-            return latitude;
-        }
-
-        public void setLatitude(double latitude) {
-            this.latitude = latitude;
-        }
-
-        public double getLongitude() {
-            return longitude;
-        }
-
-        public void setLongitude(double longitude) {
-            this.longitude = longitude;
-        }
-    }
+	/**
+	 * 将exif中存储的地理信息转换成GCJ-02坐标信息
+	 * @param exifInfoString 40/1,2/1,4117452/100000
+	 * @return latitude,longitude 40.0447706987081
+	 */
+	public static double getLatLon(String exifInfoString){
+		String gpsString = getGps(exifInfoString);
+		double convert = Location.convert(gpsString);
+		return convert;
+	}
+	/**
+	 * 将exif格式转换成gps格式
+	 * @param exifInfoString  40/1,2/1,4117452/100000
+	 * @return 40:2:36.6650
+	 */
+	private static String getGps(String exifInfoString) {
+		String[] split = exifInfoString.split(",");
+		for (int i = 0; i < split.length; i++) {
+			if (i<split.length-1) {
+				split[i] = split[i].split("/")[0];
+			}else{
+				String[] second = split[i].split("/");
+				double result = Double.parseDouble(second[0])/Double.parseDouble(second[1]);
+				split[i] = String.valueOf(result);
+			}
+		}
+		return split[0]+":"+split[1]+":"+split[2];
+	}
 }
